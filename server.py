@@ -185,4 +185,4 @@ if __name__ == '__main__':
     parser.add_argument('ip')
     parser.add_argument('-p', '--port')
     args = parser.parse_args()
-    uvicorn.run(app, host=args['ip'], port=args['port'])
+    uvicorn.run(app, host=args.ip, port=args.port)
