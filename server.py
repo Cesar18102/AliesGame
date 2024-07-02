@@ -177,8 +177,11 @@ async def setWordResult(result):
     
 def getNextWord():
     return random.choice(words)
-    
-    
+
     
 if __name__ == '__main__':
-    uvicorn.run(app, host="195.189.226.31", port=8889)
+    parser = argparse.ArgumentParser(prog='Alies', description='Alies Game')
+    parser.add_argument('ip')
+    parser.add_argument('-p', '--port')
+    args = parser.parse_args()
+    uvicorn.run(app, host=args['ip'], port=args['port'])
