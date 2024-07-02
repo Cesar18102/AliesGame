@@ -1,0 +1,153 @@
+<html>
+	<style>
+		button {
+			background: #BED7DC;
+			border-radius: 0.25vw;
+			border: 3px solid #B3C8CF;
+		}
+	</style>
+	<body style="padding: 0; margin: 0; font-family: system-ui">
+		<div id="app" style="width: 100vw; height: 100vh; background: #F1EEDC;">
+			<div v-if="model.registered">
+				<div style="margin: 10px">
+					<div>Players:</div>
+					<div v-for="player in model.players">
+						<text> {{ player.name }} - [{{ model.totalScore[player.id] }}] - [{{ model.levelScore[player.id] }}] </text>
+					</div>	
+				</div>
+				
+				<div style="position: absolute; top: 2vh; left: 48vw; width: 4vw; height: 5vh; background: #B3C8CF; border-radius: 0.25vw">
+					<div style="position: relative; top: calc(50% - 0.5em); text-align: center;">{{ model.timer }}</div>
+				</div>
+				<button v-if="!model.levelStarted" style="position: absolute; top: 2vh; left: 88vw; width: 10vw; height: 5vh;" @click="logOut">Log out</button>
+				
+				<div style="height: 60vh; width: 15vw; position: relative; left: 42.5vw; top: 10vh">
+					<button v-if="model.needsToBeStarted" @click="startGame" style="position: relative; width: 10vw; height: 5vh; top: 20vh; left: 2.5vw"> Start Game </button>
+					<button v-if="model.levelNeedsToBeStarted" @click="startLevel" style="position: relative; width: 10vw; height: 5vh; top: 20vh; left: 2.5vw"> Start Level </button>
+					
+					<div v-if="model.word != null">
+						<div style="font-size: 2.5em; width: 100%; height: 8.5%; text-align: center; cursor: hand; user-select: none;" @click="wordGuessed">&#128077;</div>
+						<div style="height: 83%; width: 100%; border-radius: 0.5vw; diplay: flex; background: #B3C8CF; ">
+							<div style="height: 96%; width: 93%; position: relative; top: 2%; left: 3.5%; border-radius: 0.25vw; diplay: flex; background: #BED7DC;">
+								<div style="text-align: center; position: relative; top: calc(50% - 1em); font-size: 2em; user-select: none;">
+									{{ model.word }}
+								</div>
+							</div>
+						</div>
+						<div style="font-size: 2.5em; width: 100%; height: 8.5%; text-align: center; cursor: hand; user-select: none;" @click="wordNotGuessed">&#128078;</div>
+					</div>
+				</div>
+			</div>
+			<div v-else style="text-align: center; position: relative; top: calc(50vh - (5vh + 20px + 1em) / 2)">
+				<div>
+					<span>Enter your login: </span>
+					<input v-model="model.name"></input>
+				</div>
+				<div style="margin: 20px">
+					<button style="width: 5vw; height: 5vh" @click="register">Log in</button>
+				</div>
+			</div>
+		</div>
+	</body>
+	<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+	<script>
+		var model = Vue.ref({
+			name: "",
+			registered: false,
+			players: [],
+			started: false,
+			needsToBeStarted: false,
+			levelStarted: false,
+			levelNeedsToBeStarted: false,
+			word: null,
+			levelScore: [],
+			totalScore: [],
+			timer: 0
+		});
+		
+		var app = Vue.createApp({ 
+			setup() { return { model }; },
+			methods: {
+				startGame: async function() {
+					await send("start", null);
+				},
+				startLevel: async function() {
+					await send("start_level", null);
+					
+					model.value.timer = 60;
+					let interval = setInterval(() => model.value.timer--, 1000);
+					setTimeout(() => clearInterval(interval), 60000);
+				},
+				wordGuessed: async function() {
+					await send("word_guessed", null);
+				},
+				wordNotGuessed: async function() {
+					await send("word_not_guessed", null);
+				},
+				logOut: function() {
+					localStorage.clear();
+					model.value.registered = false;
+				},
+				register: async function() {
+					await send(`register/${model.value.name}`, null).then(data => localStorage.setItem("playerId", data.id));
+					await load();
+				}
+			}
+		});
+		app.mount("#app");
+		
+		var address = "195.189.226.31:8889";
+		var connection;
+		
+		async function send(endpoint, body, errorHandler) {
+			if (errorHandler == null || errorHandler == undefined) {
+				errorHandler = err => {};
+			}
+			
+			let config = {
+				method: "POST", 
+				body: body ? JSON.stringify(body) : null,
+				headers: {
+				  'Accept': 'application/json',
+				  'Content-Type': 'application/json'
+				},
+			}
+			let response = await fetch(`http://${address}/${endpoint}`, config).then(response => {
+				if (response.status >= 400 && response.status < 600) {
+					throw new Error("Bad response from server");
+				}
+				return response;
+			}).catch(errorHandler);
+			
+			return response.ok ? response.json() : {};
+		}
+		
+		async function wsMessageHandler(e) {
+			let message = JSON.parse(e.data);
+			
+			if(message.action == "game state updated") {
+				await updateState();
+			}
+		}
+		
+		async function load() {	
+			let playerId = localStorage.getItem("playerId");
+			model.value.registered = playerId != null;
+			
+			if (playerId != null) {
+				connection = new WebSocket(`ws://${address}/ws/${playerId}`);
+				connection.onmessage = wsMessageHandler;
+				
+				await send(`join/${playerId}`, null);
+				await updateState();
+			}
+		}
+		
+		async function updateState() {
+			let playerId = localStorage.getItem("playerId")
+			await send(`get_state/${playerId}`, null).then(data => Object.assign(model.value, data));
+		}
+		
+		load();
+	</script>
+</html>
